@@ -18,6 +18,7 @@ public class Game : GameModule
         base.Setup(options);
 
         options.ScriptingAPI.IgnoreMissingDocumentationWarnings = true;
+        options.PublicDependencies.Add("FlaxXRPlugin");
 
         // Here you can modify the build options for your game module
         // To reference another module use: options.PublicDependencies.Add("Audio");

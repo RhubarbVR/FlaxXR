@@ -27,12 +27,65 @@ namespace FlaxXRPlugin
             };
         }
 
+        /// <summary>
+        /// Tells if OpenXR is supported on the current platform
+        /// </summary>
+        public static bool OpenXRSupported { get; private set; }
+        /// <summary>
+        /// Tells if OpenXR is running
+        /// </summary>
+        public static bool OpenXRRunning { get; private set; }
+        /// <summary>
+        /// Gets error msg of openxr for debug
+        /// </summary>
+        public static string MSG => FlaxOpenXR.OpenXRInstanceMSG(_mainOpenXRInst);
+
+       /// <summary>
+       /// Notifies if openxr is running or stopped
+       /// </summary>
+       public static event Action<bool> OpenXRStateChange;
+
+        private static IntPtr _mainOpenXRInst;
+
+        private static void NotifyStateChange(bool state)
+        {
+            OpenXRRunning = state;
+            OpenXRStateChange?.Invoke(state);
+        }
+
+        /// <summary>
+        /// Starts up OpenXR
+        /// </summary>
+        /// <returns>If OpenXR was started</returns>
+        public static bool InitOpenXR()
+        {
+            if(_mainOpenXRInst == IntPtr.Zero)
+            {
+                _mainOpenXRInst = FlaxOpenXR.BuildOpenXRInstance();
+            }
+            var state = FlaxOpenXR.InitOpenXRInstance(_mainOpenXRInst);
+            NotifyStateChange(state);
+            return state;
+        }
+
         /// <inheritdoc />
         public override void Initialize()
         {
             base.Initialize();
-
-            Debug.Log("Hello from plugin code!");
+            OpenXRSupported = FlaxOpenXR.IsOpenXRSupported();
+            if (OpenXRSupported)
+            {
+                Debug.Log("OpenXR Supported");
+                _mainOpenXRInst = FlaxOpenXR.BuildOpenXRInstance();
+#if !FLAX_EDITOR
+                InitOpenXR();
+#endif
+            }
+            else
+            {
+                Debug.Log("OpenXR not Supported on this platform");
+                NotifyStateChange(false);
+            }
         }
 
         /// <inheritdoc />
