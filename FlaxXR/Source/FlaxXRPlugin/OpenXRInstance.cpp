@@ -448,8 +448,16 @@ bool OpenXRInstance::Init() {
 	}
 
 #ifdef XR_USE_GRAPHICS_API_D3D11
+	static PFN_xrGetD3D11GraphicsRequirementsKHR pfnGetD3D11GraphicsRequirementsKHR = NULL;
+	result = xrGetInstanceProcAddr(instance, "xrGetD3D11GraphicsRequirementsKHR",
+		(PFN_xrVoidFunction*)&pfnGetD3D11GraphicsRequirementsKHR);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get xrGetD3D11GraphicsRequirementsKHR function!";
+		return false;
+	}
 	XrGraphicsRequirementsD3D11KHR dx11_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR };
-	result = xrGetD3D11GraphicsRequirementsKHR(instance, system_id, &dx11_reqs);
+	result = pfnGetD3D11GraphicsRequirementsKHR(instance, system_id, &dx11_reqs);
 	if (!XR_SUCCEEDED(result)) {
 		UpdateResultMSG(result);
 		msg += " Failed to Get XrGraphicsRequirementsD3D11!";
@@ -457,8 +465,16 @@ bool OpenXRInstance::Init() {
 	}
 #endif
 #ifdef XR_USE_GRAPHICS_API_D3D12
+	static PFN_xrGetD3D12GraphicsRequirementsKHR pfnGetD3D12GraphicsRequirementsKHR = NULL;
+	result = xrGetInstanceProcAddr(instance, "xrGetD3D12GraphicsRequirementsKHR",
+		(PFN_xrVoidFunction*)&pfnGetD3D12GraphicsRequirementsKHR);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get xrGetD3D12GraphicsRequirementsKHR function!";
+		return false;
+	}
 	XrGraphicsRequirementsD3D12KHR dx12_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR };
-	result = xrGetD3D12GraphicsRequirementsKHR(instance, system_id, &dx12_reqs);
+	result = pfnGetD3D12GraphicsRequirementsKHR(instance, system_id, &dx12_reqs);
 	if (!XR_SUCCEEDED(result)) {
 		UpdateResultMSG(result);
 		msg += " Failed to Get XrGraphicsRequirementsD3D12!";
@@ -466,15 +482,81 @@ bool OpenXRInstance::Init() {
 	}
 #endif
 #ifdef XR_USE_GRAPHICS_API_VULKAN
+	static PFN_xrGetVulkanGraphicsRequirementsKHR pfnGetVulkanGraphicsRequirementsKHR = NULL;
+	result = xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirementsKHR",
+		(PFN_xrVoidFunction*)&pfnGetD3D12GraphicsRequirementsKHR);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get xrGetVulkanGraphicsRequirementsKHR function!";
+		return false;
+	}
 	XrGraphicsRequirementsVulkanKHR vk_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR };
-	result = xrGetVulkanGraphicsRequirementsKHR(instance, system_id, &vk_reqs);
+	result = pfnGetVulkanGraphicsRequirementsKHR(instance, system_id, &vk_reqs);
 	if (!XR_SUCCEEDED(result)) {
 		UpdateResultMSG(result);
 		msg += " Failed to Get XrGraphicsRequirementsVulkan!";
 		return false;
 	}
 #endif
+	void* targetBinding = nullptr;
+	auto renderer = GPUDevice::Instance->GetRendererType();
+	switch (renderer)
+	{
+	case RendererType::DirectX11:
+#ifdef XR_USE_GRAPHICS_API_D3D11
+		graphics_binding_dx11 = { XR_TYPE_GRAPHICS_BINDING_D3D11_KHR };
+		graphics_binding_dx11.device = ((GPUDeviceDX11*)GPUDevice::Instance)->GetDevice();
+		targetBinding = &graphics_binding_dx11;
+#else
+		msg = "DirectX11 is lost";
+		return false;
+#endif
+		break;
+	case RendererType::DirectX12:
+#ifdef XR_USE_GRAPHICS_API_D3D12
+		graphics_binding_dx12 = { XR_TYPE_GRAPHICS_BINDING_D3D12_KHR };
+		graphics_binding_dx12.device = ((GPUDeviceDX12*)GPUDevice::Instance)->GetDevice();
+		graphics_binding_dx12.queue = ((GPUDeviceDX12*)GPUDevice::Instance)->GetCommandQueueDX12();
+		targetBinding = &graphics_binding_dx12;
+#else
+		msg = "DirectX12 is lost";
+		return false;
+#endif
+		break;
+	case RendererType::Vulkan:
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+		graphics_binding_vk = { XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR };
+		graphics_binding_vk.device = ((GPUDeviceVulkan*)GPUDevice::Instance)->Device;
+		graphics_binding_vk.instance = ((GPUDeviceVulkan*)GPUDevice::Instance)->Instance;
+		graphics_binding_vk.physicalDevice = ((GPUDeviceVulkan*)GPUDevice::Instance)->Adapter->Gpu;
+		graphics_binding_vk.queueFamilyIndex = ((GPUDeviceVulkan*)GPUDevice::Instance)->GraphicsQueue->_familyIndex;
+		graphics_binding_vk.queueIndex = ((GPUDeviceVulkan*)GPUDevice::Instance)->GraphicsQueue->_queueIndex;
+		targetBinding = &graphics_binding_vk;
+#else
+		msg = "Vulkan is lost";
+		return false;
+#endif
+		break;
+	default:
+		msg = "Not supported backend";
+		return false;
+		break;
+	}
 
+	if (targetBinding == nullptr) {
+		msg = "Not supported backend";
+		return false;
+	}
+
+	XrSessionCreateInfo session_create_info = { XR_TYPE_SESSION_CREATE_INFO };
+	session_create_info.next = &targetBinding;
+	session_create_info.systemId = system_id;
+	result = xrCreateSession(instance, &session_create_info, &session);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to create session!";
+		return false;
+	}
 
 	msg = "Started OpenXR";
 	return true;

@@ -6,19 +6,26 @@
 
 #if GRAPHICS_API_VULKAN
 #define XR_USE_GRAPHICS_API_VULKAN
+#define VK_NO_PROTOTYPES
+#include "Engine\GraphicsDevice\Vulkan\GPUDeviceVulkan.h"
+#include "Engine\GraphicsDevice\Vulkan\GPUAdapterVulkan.h"
+#include "Engine\GraphicsDevice\Vulkan\QueueVulkan.h"
 #include <vulkan/vulkan.h>
 #endif // GRAPHICS_API_VULKAN
 
 #ifdef GRAPHICS_API_DIRECTX12
 #define XR_USE_GRAPHICS_API_D3D12
+#include "Engine\GraphicsDevice\DirectX\DX12\GPUDeviceDX12.h"
 
 #include <d3d12.h>
 #endif // GRAPHICS_API_DIRECTX12
 
 #ifdef GRAPHICS_API_DIRECTX11
 #define XR_USE_GRAPHICS_API_D3D11
+#include "Engine\GraphicsDevice\DirectX\DX11\GPUDeviceDX11.h"
 
 #include <d3d11.h>
+
 #endif // GRAPHICS_API_DIRECTX11
 
 //#ifdef PLATFORM_ANDROID
@@ -30,7 +37,6 @@
 //
 //
 //#endif
-#define XR_EXTENSION_PROTOTYPES
 
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -71,6 +77,16 @@ class OpenXRInstance
 	XrCompositionLayerProjectionView* projection_views = NULL;
 	// array of view_count views, filled by the runtime with current HMD display pose
 	XrView* views = NULL;
+
+#ifdef XR_USE_GRAPHICS_API_D3D11
+	XrGraphicsBindingD3D11KHR graphics_binding_dx11;
+#endif
+#ifdef XR_USE_GRAPHICS_API_D3D12
+	XrGraphicsBindingD3D12KHR graphics_binding_dx12;
+#endif
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+	XrGraphicsBindingVulkanKHR graphics_binding_vk;
+#endif
 
 	void UpdateResultMSG(XrResult result);
 
