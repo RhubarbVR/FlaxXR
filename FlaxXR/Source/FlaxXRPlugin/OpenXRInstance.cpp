@@ -1,4 +1,6 @@
 #include "OpenXRInstance.h"
+#include <Engine/Engine/Globals.h>
+#include <Engine/Debug/DebugLog.h>
 
 #if ((GRAPHICS_API_VULKAN | GRAPHICS_API_DIRECTX12 | GRAPHICS_API_DIRECTX11) & OPENXR_SUPPORT)
 void OpenXRInstance::UpdateResultMSG(XrResult result) {
@@ -297,13 +299,13 @@ bool OpenXRInstance::Init() {
 #endif
 	const char* enabled_exts[enabled_ext_count] =
 	{
-#if (GRAPHICS_API_VULKAN)
+#ifdef XR_USE_GRAPHICS_API_VULKAN
 		XR_KHR_VULKAN_ENABLE_EXTENSION_NAME,
 #endif
-#if (GRAPHICS_API_DIRECTX11)
+#ifdef XR_USE_GRAPHICS_API_D3D11
 		XR_KHR_D3D11_ENABLE_EXTENSION_NAME,
 #endif
-#if (GRAPHICS_API_DIRECTX12)
+#ifdef XR_USE_GRAPHICS_API_D3D12
 		XR_KHR_D3D12_ENABLE_EXTENSION_NAME,
 #endif
 	};
@@ -350,17 +352,17 @@ bool OpenXRInstance::Init() {
 	bool vulkan_supported = false;
 
 	for (uint32_t i = 0; i < ext_count; i++) {
-#if (GRAPHICS_API_DIRECTX11)
+#ifdef XR_USE_GRAPHICS_API_D3D11
 		if (strcmp(XR_KHR_D3D11_ENABLE_EXTENSION_NAME, ext_props[i].extensionName) == 0) {
 			dx11_supported = true;
 		}
 #endif
-#if (GRAPHICS_API_DIRECTX12)
+#ifdef XR_USE_GRAPHICS_API_D3D12
 		if (strcmp(XR_KHR_D3D12_ENABLE_EXTENSION_NAME, ext_props[i].extensionName) == 0) {
 			dx12_supported = true;
 		}
 #endif
-#if (GRAPHICS_API_VULKAN)
+#ifdef XR_USE_GRAPHICS_API_VULKAN
 		if (strcmp(XR_KHR_VULKAN_ENABLE_EXTENSION_NAME, ext_props[i].extensionName) == 0) {
 			dx12_supported = true;
 		}
@@ -381,37 +383,99 @@ bool OpenXRInstance::Init() {
 
 
 
-	XrInstanceCreateInfo instance_create_info = {};
-
-	instance_create_info.type = XR_TYPE_INSTANCE_CREATE_INFO;
-	instance_create_info.next = NULL;
-	instance_create_info.createFlags = 0;
+	XrInstanceCreateInfo instance_create_info = { XR_TYPE_INSTANCE_CREATE_INFO };
 	instance_create_info.enabledExtensionCount = enabled_ext_count;
-	instance_create_info.enabledExtensionNames = enabled_exts;
-	instance_create_info.enabledApiLayerCount = 0;
-	instance_create_info.enabledApiLayerNames = NULL;
-	XrApplicationInfo appllication = {};
+	instance_create_info.enabledExtensionNames =   enabled_exts;
 	auto settings = GameSettings::Get();
-	auto lengthOfName = settings->ProductName.Length();
-	for (size_t i = 0; i < lengthOfName; i++)
-	{
-		appllication.applicationName[i] = settings->ProductName[i];
-	}
-	appllication.engineName[0] = 'F';
-	appllication.engineName[1] = 'l';
-	appllication.engineName[2] = 'a';
-	appllication.engineName[3] = 'x';
-	appllication.applicationVersion = 1;
-	appllication.engineVersion = 0;
-	appllication.apiVersion = XR_CURRENT_API_VERSION;
-	instance_create_info.applicationInfo = appllication;
-
+	snprintf(instance_create_info.applicationInfo.applicationName, sizeof(instance_create_info.applicationInfo.applicationName), "%ls", settings->ProductName.GetText());
+	snprintf(instance_create_info.applicationInfo.engineName, sizeof(instance_create_info.applicationInfo.engineName), "Flax Engine");
+	instance_create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+	instance_create_info.applicationInfo.engineVersion = Globals::EngineBuildNumber;
+	instance_create_info.applicationInfo.applicationVersion = 1;
+#ifdef XR_USE_PLATFORM_ANDROID
+	XrInstanceCreateInfoAndroidKHR create_android = { XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR };
+	create_android.applicationVM = android_vm;//need to setup for flax
+	create_android.applicationActivity = android_activity;//need to setup for flax
+	instance_create_info.next = (void*)&create_android;
+#endif
 	result = xrCreateInstance(&instance_create_info, &instance);
 	if (!XR_SUCCEEDED(result)) {
 		UpdateResultMSG(result);
 		msg += " Failed to create XR instance";
 		return false;
 	}
+
+	
+	XrSystemGetInfo system_get_info = { XR_TYPE_SYSTEM_GET_INFO };
+	system_get_info.formFactor = form_factor;
+	system_get_info.next = NULL;
+
+	result = xrGetSystem(instance, &system_get_info, &system_id);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get XR System";
+		return false;
+	}
+	XrSystemProperties system_props = { XR_TYPE_SYSTEM_PROPERTIES };
+	system_props.next = NULL;
+
+	result = xrGetSystemProperties(instance, system_id, &system_props);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get XR System Properties";
+		return false;
+	}
+
+	result = xrEnumerateViewConfigurationViews(instance, system_id, view_type, 0, &view_count, NULL);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to get view configuration view count!";
+		return false;
+	}
+
+	viewconfig_views = (XrViewConfigurationView*)malloc(sizeof(XrViewConfigurationView) * view_count);
+	for (uint32_t i = 0; i < view_count; i++) {
+		viewconfig_views[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+		viewconfig_views[i].next = NULL;
+	}
+
+	result = xrEnumerateViewConfigurationViews(instance, system_id, view_type, view_count,
+		&view_count, viewconfig_views);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to enumerate view configuration views!";
+		return false;
+	}
+
+#ifdef XR_USE_GRAPHICS_API_D3D11
+	XrGraphicsRequirementsD3D11KHR dx11_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR };
+	result = xrGetD3D11GraphicsRequirementsKHR(instance, system_id, &dx11_reqs);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get XrGraphicsRequirementsD3D11!";
+		return false;
+	}
+#endif
+#ifdef XR_USE_GRAPHICS_API_D3D12
+	XrGraphicsRequirementsD3D12KHR dx12_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR };
+	result = xrGetD3D12GraphicsRequirementsKHR(instance, system_id, &dx12_reqs);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get XrGraphicsRequirementsD3D12!";
+		return false;
+	}
+#endif
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+	XrGraphicsRequirementsVulkanKHR vk_reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR };
+	result = xrGetVulkanGraphicsRequirementsKHR(instance, system_id, &vk_reqs);
+	if (!XR_SUCCEEDED(result)) {
+		UpdateResultMSG(result);
+		msg += " Failed to Get XrGraphicsRequirementsVulkan!";
+		return false;
+	}
+#endif
+
+
 	msg = "Started OpenXR";
 	return true;
 #else // OPENXR_SUPPORT

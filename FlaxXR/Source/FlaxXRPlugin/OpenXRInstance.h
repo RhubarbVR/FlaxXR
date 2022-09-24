@@ -11,22 +11,32 @@
 
 #ifdef GRAPHICS_API_DIRECTX12
 #define XR_USE_GRAPHICS_API_D3D12
+
 #include <d3d12.h>
 #endif // GRAPHICS_API_DIRECTX12
 
 #ifdef GRAPHICS_API_DIRECTX11
 #define XR_USE_GRAPHICS_API_D3D11
+
 #include <d3d11.h>
 #endif // GRAPHICS_API_DIRECTX11
 
-#ifdef PLATFORM_ARCH_X64 
-
-#endif
+//#ifdef PLATFORM_ANDROID
+//#define XR_USE_PLATFORM_ANDROID
+//
+//#include <android/configuration.h>
+//#include <android/looper.h>
+//#include <android/native_activity.h>
+//
+//
+//#endif
+#define XR_EXTENSION_PROTOTYPES
 
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 #include <openxr/openxr_platform_defines.h>
 #include <openxr/openxr_reflection.h>
+
 #endif // OPENXR_SUPPORT
 
 
@@ -49,6 +59,19 @@ class OpenXRInstance
 	XrSystemId system_id = XR_NULL_SYSTEM_ID;
 	// the session deals with the renderloop submitting frames to the runtime
 	XrSession session = XR_NULL_HANDLE;
+	// each physical Display/Eye is described by a view.
+	// view_count usually depends on the form_factor / view_type.
+	// dynamically allocating all view related structs instead of assuming 2
+	// hopefully allows this app to scale easily to different view_counts.
+	uint32_t view_count = 0;
+	// the viewconfiguration views contain information like resolution about each view
+	XrViewConfigurationView* viewconfig_views = NULL;
+
+	// array of view_count containers for submitting swapchains with rendered VR frames
+	XrCompositionLayerProjectionView* projection_views = NULL;
+	// array of view_count views, filled by the runtime with current HMD display pose
+	XrView* views = NULL;
+
 	void UpdateResultMSG(XrResult result);
 
 #endif
